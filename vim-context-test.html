@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vim EHR Context Test</title>
+  <style>
+    body { font-family: monospace; padding: 16px; font-size: 13px; }
+    h2 { margin-bottom: 4px; }
+    pre { background: #f4f4f4; padding: 12px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }
+    .label { color: #666; font-size: 11px; text-transform: uppercase; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <h2>Vim EHR Context</h2>
+  <p class="label">Status</p>
+  <pre id="status">Initializing SDK...</pre>
+  <p class="label">Patient</p>
+  <pre id="patient">waiting...</pre>
+  <p class="label">Encounter</p>
+  <pre id="encounter">waiting...</pre>
+
+  <script src="https://connect.getvim.com/sdk/vim-os.js"></script>
+  <script>
+    const statusEl = document.getElementById('status');
+    const patientEl = document.getElementById('patient');
+    const encounterEl = document.getElementById('encounter');
+
+    VimOS.loadSdk().then(function(sdk) {
+      statusEl.textContent = 'SDK initialized. Waiting for EHR events...';
+
+      // Read current state immediately
+      const state = sdk.ehr.ehrState;
+      if (state.patient) patientEl.textContent = JSON.stringify(state.patient, null, 2);
+      if (state.encounter) encounterEl.textContent = JSON.stringify(state.encounter, null, 2);
+
+      // Subscribe to updates
+      sdk.ehr.subscribe('patient', function(patient) {
+        patientEl.textContent = JSON.stringify(patient, null, 2);
+      });
+
+      sdk.ehr.subscribe('encounter', function(encounter) {
+        encounterEl.textContent = JSON.stringify(encounter, null, 2);
+      });
+
+    }).catch(function(err) {
+      statusEl.textContent = 'SDK error: ' + err.message;
+    });
+  </script>
+</body>
+</html>
