@@ -484,13 +484,23 @@ function confirmAccept(id) {
     body: JSON.stringify(condition),
   })
   .then(function(res) {
-    return res.json().then(function(data) { return { ok: res.ok, status: res.status, data: data }; });
+    var ok = res.ok, resStatus = res.status;
+    var location = res.headers.get('location') || res.headers.get('Location') || '';
+    return res.text().then(function(text) {
+      var data = null;
+      try { if (text) data = JSON.parse(text); } catch(e) {}
+      return { ok: ok, status: resStatus, data: data, location: location };
+    });
   })
   .then(function(r) {
     if (r.ok) {
-      markAccepted(id, r.data.id || '');
+      // Cerner returns 201 with Location header; body may be empty
+      var fhirId = (r.data && r.data.id) ||
+                   r.location.split('/').filter(Boolean).slice(-2, -1)[0] || '';
+      markAccepted(id, fhirId);
     } else {
-      var msg = (r.data.issue && r.data.issue[0] && r.data.issue[0].diagnostics) || ('HTTP '+r.status);
+      var msg = (r.data && r.data.issue && r.data.issue[0] && r.data.issue[0].diagnostics)
+                || ('HTTP ' + r.status);
       btn.disabled = false;
       status.textContent = 'Write failed: ' + msg;
     }
