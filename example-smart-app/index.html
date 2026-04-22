@@ -1,101 +1,553 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta http-equiv='X-UA-Compatible' content='IE=edge' />
-    <meta http-equiv='Content-Type' content='text/html; charset=utf-8' />
-    <title>Example-SMART-App</title>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Care Insights — Oracle Health</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    <link rel='stylesheet' type='text/css' href='./src/css/example-smart-app.css'>
-    <!--
-      Temporarily disable cerner-smart-embeddable-lib
-      <link rel='stylesheet' type='text/css' href='./lib/css/cerner-smart-embeddable-lib-1.0.0.min.css'>
-    -->
-  </head>
-  <body>
-    <div id='errors'>
+    :root {
+      --blue:        #1358D0;
+      --blue-dark:   #0D3F9E;
+      --blue-light:  #EEF3FF;
+      --text:        #111827;
+      --sub:         #6B7280;
+      --muted:       #9CA3AF;
+      --border:      #E5E7EB;
+      --bg:          #F5F7FA;
+      --red:         #DC2626;
+      --red-bg:      #FEF2F2;
+      --amber:       #D97706;
+      --green:       #059669;
+      --green-bg:    #ECFDF5;
+      --green-border:#A7F3D0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    .app { max-width: 560px; margin: 0 auto; }
+
+    /* ── Header ── */
+    .header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 20px;
+      background: var(--blue); color: #fff;
+    }
+    .header svg { width: 22px; height: 22px; flex-shrink: 0; }
+    .header-title { font-size: 16px; font-weight: 600; flex: 1; }
+    .header-pill {
+      font-size: 11px; font-weight: 600;
+      background: rgba(255,255,255,.2);
+      padding: 3px 8px; border-radius: 10px;
+    }
+
+    /* ── Status bar ── */
+    .status-bar {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 20px;
+      background: #fff; border-bottom: 1px solid var(--border);
+      font-size: 12px; color: var(--sub);
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    .dot.ok   { background: var(--green); }
+    .dot.err  { background: var(--red); }
+    .dot.spin { background: var(--amber); animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ── Patient ── */
+    .patient {
+      background: #fff;
+      padding: 16px 20px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .patient-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .patient-name.empty { color: var(--muted); font-weight: 400; font-size: 14px; }
+    .patient-meta { font-size: 13px; color: var(--sub); margin-bottom: 6px; }
+    .patient-mid {
+      display: inline-flex; align-items: center;
+      font-size: 12px; font-weight: 500;
+      color: var(--blue); background: var(--blue-light);
+      padding: 3px 9px; border-radius: 4px;
+    }
+
+    /* ── Section ── */
+    .section { padding: 14px 20px 0; }
+    .section-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .section-label {
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .6px;
+      color: var(--sub);
+    }
+    .count-pill {
+      font-size: 11px; font-weight: 600; color: #fff;
+      background: var(--red); padding: 2px 9px; border-radius: 10px;
+    }
+    .count-pill.zero { background: var(--green); }
+
+    /* ── Gap card ── */
+    .gap {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 10px;
+      overflow: hidden;
+      transition: box-shadow .15s;
+    }
+    .gap:hover { box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+    .gap.is-accepted { border-color: var(--green-border); }
+    .gap.is-declined { opacity: .5; }
+
+    .gap-top {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 14px 16px 10px;
+    }
+    .pip {
+      width: 10px; height: 10px; border-radius: 50%;
+      flex-shrink: 0; margin-top: 4px;
+    }
+    .pip-open { background: var(--red); }
+    .pip-warn { background: var(--amber); }
+    .pip-done { background: var(--green); }
+
+    .gap-body { flex: 1; min-width: 0; }
+    .gap-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+    .gap-sub  { font-size: 12px; color: var(--sub); margin-bottom: 7px; }
+    .chips    { display: flex; flex-wrap: wrap; gap: 5px; }
+    .chip {
+      font-size: 11px; font-weight: 500;
+      padding: 2px 7px; border-radius: 4px;
+    }
+    .c-due  { background: #FEF3C7; color: #92400E; }
+    .c-icd  { background: #F3F4F6; color: #374151; font-family: monospace; }
+    .c-hed  { background: var(--blue-light); color: var(--blue); }
+    .c-ok   { background: var(--green-bg); color: var(--green); }
+    .c-dec  { background: var(--red-bg); color: var(--red); }
+
+    /* ── Action row ── */
+    .gap-actions {
+      display: flex; gap: 8px;
+      padding: 10px 16px;
+      border-top: 1px solid #F3F4F6;
+      background: #FAFAFA;
+    }
+
+    /* ── Confirm panel ── */
+    .confirm-panel {
+      display: none;
+      padding: 12px 16px;
+      background: #F9FAFB;
+      border-top: 1px solid var(--border);
+    }
+    .confirm-panel.open { display: block; }
+    .confirm-label {
+      font-size: 13px; color: var(--sub); margin-bottom: 10px; line-height: 1.5;
+    }
+    .confirm-label strong { color: var(--text); }
+    .confirm-row { display: flex; gap: 8px; align-items: center; }
+    .write-status {
+      font-size: 12px; color: var(--sub); margin-left: 4px;
+      display: none;
+    }
+    .write-status.show { display: inline; }
+
+    /* ── Accepted bar ── */
+    .accepted-bar {
+      display: none; align-items: center; gap: 8px;
+      padding: 10px 16px;
+      background: var(--green-bg);
+      border-top: 1px solid var(--green-border);
+      font-size: 13px; font-weight: 500; color: var(--green);
+    }
+    .accepted-bar.show { display: flex; }
+    .accepted-bar .fhir-id {
+      font-size: 11px; font-weight: 400; color: var(--sub);
+      font-family: monospace; margin-left: auto;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 7px 14px; border-radius: 7px;
+      font-size: 13px; font-weight: 500;
+      cursor: pointer; border: none;
+      transition: background .1s, opacity .1s;
+      white-space: nowrap;
+    }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .btn-blue  { background: var(--blue);  color: #fff; }
+    .btn-blue:hover  { background: var(--blue-dark); }
+    .btn-green { background: var(--green); color: #fff; }
+    .btn-green:hover { background: #047857; }
+    .btn-ghost { background: #fff; color: #374151; border: 1px solid var(--border); }
+    .btn-ghost:hover { background: #F9FAFB; }
+    .btn-danger { background: #fff; color: var(--red); border: 1px solid #FECACA; }
+    .btn-danger:hover { background: var(--red-bg); }
+
+    /* ── Loading / error ── */
+    .loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--sub);
+    }
+    .spinner {
+      display: inline-block;
+      width: 28px; height: 28px;
+      border: 3px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin-bottom: 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-box {
+      margin: 20px; padding: 14px 16px;
+      background: var(--red-bg); border: 1px solid #FECACA;
+      border-radius: 8px; font-size: 13px; color: var(--red);
+    }
+
+    /* ── Footer ── */
+    .footer {
+      padding: 12px 20px 24px;
+      text-align: center; font-size: 12px; color: var(--muted);
+    }
+    .footer a { color: var(--muted); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <div class="header">
+    <svg viewBox="0 0 24 24">
+      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="white"/>
+    </svg>
+    <span class="header-title">Care Insights</span>
+    <span class="header-pill">Optum · Oracle Health</span>
+  </div>
+
+  <!-- Status -->
+  <div class="status-bar">
+    <div class="dot spin" id="connDot"></div>
+    <span id="connText">Loading patient…</span>
+  </div>
+
+  <!-- Loading -->
+  <div class="loading" id="loadingEl">
+    <div class="spinner"></div>
+    <div>Connecting to EHR…</div>
+  </div>
+
+  <!-- Main content (hidden until patient loads) -->
+  <div id="mainContent" style="display:none">
+
+    <!-- Patient -->
+    <div class="patient">
+      <div class="patient-name" id="ptName"></div>
+      <div class="patient-meta" id="ptMeta"></div>
+      <div id="ptMid"></div>
     </div>
-    <div id="loading" class="spinner">
-      <div class="bounce1"></div>
-      <div class="bounce2"></div>
-      <div class="bounce3"></div>
+
+    <!-- Gaps -->
+    <div class="section">
+      <div class="section-row">
+        <span class="section-label">Care Gaps</span>
+        <span class="count-pill" id="gapCount"></span>
+      </div>
+      <div id="gapList"></div>
     </div>
-    <div id='holder' >
-      <h2>Example-SMART-App</h2>
 
-      <h2>Patient Resource</h2>
-      <table>
-        <tr>
-          <th>First Name:</th>
-          <td id='fname'></td>
-        </tr>
-        <tr>
-          <th>Last Name:</th>
-          <td id='lname'></td>
-        </tr>
-        <tr>
-          <th>Gender:</th>
-          <td id='gender'></td>
-        </tr>
-        <tr>
-          <th>Date of Birth:</th>
-          <td id='birthdate'></td>
-        </tr>
-      </table>
-      <h2>Observation Resource</h2>
-      <table>
-        <tr>
-          <th>Height:</th>
-          <td id='height'></td>
-        </tr>
-        <tr>
-          <th>Systolic Blood Pressure:</th>
-          <td id='systolicbp'></td>
-
-        </tr>
-        <tr>
-          <th>Diastolic Blood Pressure:</th>
-          <td id='diastolicbp'></td>
-        </tr>
-        <tr>
-          <th>LDL:</th>
-          <td id='ldl'></td>
-        </tr>
-        <tr>
-          <th>HDL:</th>
-          <td id='hdl'></td>
-        </tr>
-      </table>
+    <div class="footer">
+      <a href="#">Terms of Service</a> · <a href="#">Privacy Policy</a>
     </div>
-    <!-- Required JS files to enable this page to embed within an MPage -->
-    <!--
-      Temporarily disable cerner-smart-embeddable-lib
-      <script src='https://cdnjs.cloudflare.com/ajax/libs/babel-polyfill/6.26.0/polyfill.min.js'></script>
-      <script src='./lib/js/cerner-smart-embeddable-lib-1.0.0.min.js'></script>
-    -->
 
-    <!-- Application-level javascript-->
-    <script src='./src/js/example-smart-app.js'></script>
+  </div>
 
-    <!-- FHIR Client JS Library -->
-    <script src='./lib/js/fhir-client-v0.1.12.js'></script>
+  <!-- Error -->
+  <div class="error-box" id="errorEl" style="display:none"></div>
 
-    <!-- Prevent session bleed caused by single threaded embedded browser and sessionStorage API -->
-    <!-- https://github.com/cerner/fhir-client-cerner-additions -->
-    <script src='./lib/js/fhir-client-cerner-additions-1.0.0.js'></script>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
-    <script>
-      extractData().then(
-        //Display Patient Demographics and Observations if extractData was success
-        function(p) {
-          drawVisualization(p);
-        },
+</div>
 
-        //Display 'Failed to call FHIR Service' if extractData failed
-        function() {
-          $('#loading').hide();
-          $('#errors').html('<p> Failed to call FHIR Service </p>');
-        }
-      );
-    </script>
-  </body>
+<!-- FHIR client libs (same versions as launch.html) -->
+<script src='./lib/js/fhir-client-v0.1.12.js'></script>
+<script src='./lib/js/fhir-client-cerner-additions-1.0.0.js'></script>
+<script>
+// ── Gap definitions (must match CDS service hash logic) ──────────────────────
+var GAP_DEFS = {
+  hba1c: { name:'HbA1c Poor Control',          sub:'Diabetes Care · CDC',        icd:'E11.65', icdDesc:'Type 2 diabetes mellitus with hyperglycemia',                          pip:'pip-open', dueTxt:'Overdue' },
+  col:   { name:'Colorectal Cancer Screening',  sub:'Preventive Care · COL-E',    icd:'Z12.11', icdDesc:'Encounter for screening for malignant neoplasm of colon',              pip:'pip-open', dueTxt:'Overdue' },
+  bcs:   { name:'Breast Cancer Screening',      sub:'Preventive Care · BCS-E',    icd:'Z12.31', icdDesc:'Encounter for screening mammogram for malignant neoplasm of breast',   pip:'pip-warn', dueTxt:'Due in 90 days' },
+  cbp:   { name:'Blood Pressure Control',       sub:'Hypertension · CBP',         icd:'I10',    icdDesc:'Essential (primary) hypertension',                                     pip:'pip-warn', dueTxt:'Due in 90 days' },
+  eed:   { name:'Diabetic Eye Exam',            sub:'Diabetes Care · EED',        icd:'Z01.00', icdDesc:'Encounter for examination of eyes and vision',                         pip:'pip-open', dueTxt:'Overdue' },
+  ked:   { name:'Kidney Health Evaluation',     sub:'Diabetes Care · KED',        icd:'N18.9',  icdDesc:'Chronic kidney disease, unspecified',                                  pip:'pip-open', dueTxt:'Overdue' },
+  dep:   { name:'Depression Screening (PHQ-9)', sub:'Behavioral Health · DEP',    icd:'Z13.31', icdDesc:'Encounter for screening for depression',                               pip:'pip-warn', dueTxt:'Due this visit' },
+};
+
+var GAP_PROFILES = [
+  ['hba1c','col','eed'],
+  ['bcs',  'cbp','col'],
+  ['hba1c','bcs','cbp'],
+  ['col',  'eed','ked'],
+  ['hba1c','ked','dep'],
+];
+
+function hashId(id) {
+  var h = 0;
+  for (var i = 0; i < String(id).length; i++)
+    h = (h * 31 + String(id).charCodeAt(i)) & 0xffff;
+  return h;
+}
+
+function getGapsForPatient(patientId) {
+  var profile = GAP_PROFILES[hashId(patientId) % GAP_PROFILES.length];
+  return profile.map(function(k) { return Object.assign({ id: k }, GAP_DEFS[k]); });
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+var _smart = null;
+var _patientId = null;
+var _gapStates = {};  // id -> 'open'|'accepted'|'declined'
+
+// ── UI helpers ───────────────────────────────────────────────────────────────
+function setConn(type, text) {
+  document.getElementById('connDot').className = 'dot '+(type==='ok'?'ok':type==='err'?'err':'spin');
+  document.getElementById('connText').textContent = text;
+}
+
+function showError(msg) {
+  document.getElementById('loadingEl').style.display = 'none';
+  var el = document.getElementById('errorEl');
+  el.textContent = 'Error: ' + msg;
+  el.style.display = 'block';
+  setConn('err', 'Connection failed');
+}
+
+function fmtDob(s) {
+  if (!s) return null;
+  var p = s.split('-');
+  if (p.length !== 3) return s;
+  var m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return m[+p[1]-1] + ' ' + +p[2] + ', ' + p[0];
+}
+function calcAge(s) {
+  if (!s) return null;
+  var b = new Date(s), n = new Date();
+  var a = n.getFullYear() - b.getFullYear();
+  if (n.getMonth()<b.getMonth() || (n.getMonth()===b.getMonth() && n.getDate()<b.getDate())) a--;
+  return a;
+}
+
+function renderPatient(pt) {
+  var name = '';
+  if (pt.name && pt.name[0]) {
+    var given = (pt.name[0].given || []).join(' ');
+    name = [given, pt.name[0].family].filter(Boolean).join(' ');
+  }
+  var dob = fmtDob(pt.birthDate);
+  var age = calcAge(pt.birthDate);
+  var gender = pt.gender ? pt.gender.charAt(0).toUpperCase() + pt.gender.slice(1) : null;
+
+  document.getElementById('ptName').textContent = name || 'Unknown Patient';
+  document.getElementById('ptMeta').textContent =
+    [dob, age && age+' yo', gender].filter(Boolean).join(' · ');
+}
+
+function updateCountBadge(gaps) {
+  var n = gaps.filter(function(g){ return _gapStates[g.id]==='open'; }).length;
+  var el = document.getElementById('gapCount');
+  el.textContent = n + ' open';
+  el.className = 'count-pill' + (n === 0 ? ' zero' : '');
+}
+
+function buildCard(gap) {
+  var s = _gapStates[gap.id];
+
+  var chipsHtml = s==='accepted'
+    ? '<span class="chip c-ok">✓ Added to Problem List</span>'
+    : s==='declined'
+      ? '<span class="chip c-dec">Declined</span>'
+      : '<span class="chip c-due">'+gap.dueTxt+'</span>' +
+        '<span class="chip c-icd">'+gap.icd+'</span>' +
+        '<span class="chip c-hed">HEDIS 2026</span>';
+
+  var actionsHtml = (s !== 'accepted' && s !== 'declined')
+    ? '<div class="gap-actions">' +
+        '<button class="btn btn-blue" onclick="startAccept(\''+gap.id+'\')">Accept</button>' +
+        '<button class="btn btn-danger" onclick="declineGap(\''+gap.id+'\')">Decline</button>' +
+      '</div>'
+    : '';
+
+  var confirmHtml =
+    '<div class="confirm-panel" id="confirm-'+gap.id+'">' +
+      '<div class="confirm-label">Add <strong>'+gap.icd+'</strong> — '+gap.icdDesc+' to this patient\'s problem list?</div>' +
+      '<div class="confirm-row">' +
+        '<button class="btn btn-green" id="confirmBtn-'+gap.id+'" onclick="confirmAccept(\''+gap.id+'\')">✓ Confirm &amp; Write to Chart</button>' +
+        '<button class="btn btn-ghost" onclick="cancelAccept(\''+gap.id+'\')">Cancel</button>' +
+        '<span class="write-status" id="writeStatus-'+gap.id+'"></span>' +
+      '</div>' +
+    '</div>';
+
+  var acceptedBarHtml =
+    '<div class="accepted-bar'+(s==='accepted'?' show':'')+'" id="accepted-'+gap.id+'">' +
+      '<svg width="16" height="16" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#059669"/>' +
+      '<path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+      gap.icd + ' written to problem list' +
+      '<span class="fhir-id" id="fhirId-'+gap.id+'"></span>' +
+    '</div>';
+
+  var el = document.createElement('div');
+  el.id = 'gap-'+gap.id;
+  el.className = 'gap'+(s==='accepted'?' is-accepted':s==='declined'?' is-declined':'');
+  el.innerHTML =
+    '<div class="gap-top">' +
+      '<div class="pip '+gap.pip+'"></div>' +
+      '<div class="gap-body">' +
+        '<div class="gap-name">'+gap.name+'</div>' +
+        '<div class="gap-sub">'+gap.sub+'</div>' +
+        '<div class="chips" id="chips-'+gap.id+'">'+chipsHtml+'</div>' +
+      '</div>' +
+    '</div>' +
+    confirmHtml + acceptedBarHtml + actionsHtml;
+  return el;
+}
+
+function renderGaps(patientId) {
+  var gaps = getGapsForPatient(patientId);
+  gaps.forEach(function(g) { _gapStates[g.id] = 'open'; });
+
+  var list = document.getElementById('gapList');
+  list.innerHTML = '';
+  gaps.forEach(function(g) { list.appendChild(buildCard(g)); });
+  updateCountBadge(gaps);
+  return gaps;
+}
+
+// ── Gap interactions ─────────────────────────────────────────────────────────
+var _currentGaps = [];
+
+function startAccept(id) {
+  document.getElementById('confirm-'+id).classList.add('open');
+}
+function cancelAccept(id) {
+  document.getElementById('confirm-'+id).classList.remove('open');
+}
+
+function confirmAccept(id) {
+  var gap = _currentGaps.find(function(g){ return g.id===id; });
+  if (!gap) return;
+
+  var btn = document.getElementById('confirmBtn-'+id);
+  var status = document.getElementById('writeStatus-'+id);
+  btn.disabled = true;
+  status.textContent = 'Writing…';
+  status.className = 'write-status show';
+
+  var fhirBase = _smart.server.serviceUrl;
+  var token = _smart.tokenResponse.access_token;
+
+  var condition = {
+    resourceType: 'Condition',
+    clinicalStatus: {
+      coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-clinical', code: 'active' }]
+    },
+    verificationStatus: {
+      coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-ver-status', code: 'confirmed' }]
+    },
+    category: [{
+      coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-category', code: 'problem-list-item', display: 'Problem List Item' }]
+    }],
+    code: {
+      coding: [{ system: 'http://hl7.org/fhir/sid/icd-10-cm', code: gap.icd, display: gap.icdDesc }],
+      text: gap.icdDesc
+    },
+    subject: { reference: 'Patient/' + _patientId }
+  };
+
+  fetch(fhirBase + '/Condition', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Content-Type': 'application/fhir+json',
+      'Accept': 'application/fhir+json',
+    },
+    body: JSON.stringify(condition),
+  })
+  .then(function(res) {
+    return res.json().then(function(data) { return { ok: res.ok, status: res.status, data: data }; });
+  })
+  .then(function(r) {
+    if (r.ok) {
+      markAccepted(id, r.data.id || '');
+    } else {
+      var msg = (r.data.issue && r.data.issue[0] && r.data.issue[0].diagnostics) || ('HTTP '+r.status);
+      btn.disabled = false;
+      status.textContent = 'Write failed: ' + msg;
+    }
+  })
+  .catch(function(err) {
+    btn.disabled = false;
+    status.textContent = 'Error: ' + err.message;
+  });
+}
+
+function markAccepted(id, fhirResourceId) {
+  _gapStates[id] = 'accepted';
+  var card = document.getElementById('gap-'+id);
+  card.className = 'gap is-accepted';
+  document.getElementById('confirm-'+id).style.display = 'none';
+  document.getElementById('chips-'+id).innerHTML = '<span class="chip c-ok">✓ Added to Problem List</span>';
+  var bar = document.getElementById('accepted-'+id);
+  bar.classList.add('show');
+  if (fhirResourceId) {
+    document.getElementById('fhirId-'+id).textContent = 'ID: ' + fhirResourceId;
+  }
+  var acts = card.querySelector('.gap-actions');
+  if (acts) acts.remove();
+  updateCountBadge(_currentGaps);
+}
+
+function declineGap(id) {
+  _gapStates[id] = 'declined';
+  var card = document.getElementById('gap-'+id);
+  card.className = 'gap is-declined';
+  document.getElementById('chips-'+id).innerHTML = '<span class="chip c-dec">Declined</span>';
+  var acts = card.querySelector('.gap-actions');
+  if (acts) acts.remove();
+  updateCountBadge(_currentGaps);
+}
+
+// ── SMART init ───────────────────────────────────────────────────────────────
+FHIR.oauth2.ready(function(smart) {
+  _smart = smart;
+
+  smart.patient.read().then(function(patient) {
+    _patientId = patient.id;
+
+    document.getElementById('loadingEl').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'block';
+
+    renderPatient(patient);
+    _currentGaps = renderGaps(patient.id);
+
+    setConn('ok', 'Connected · ' + smart.server.serviceUrl.replace('https://', ''));
+  }).catch(function(err) {
+    showError('Could not read patient: ' + (err.message || err));
+  });
+
+}, function(err) {
+  showError(err.message || JSON.stringify(err));
+});
+</script>
+</body>
 </html>
