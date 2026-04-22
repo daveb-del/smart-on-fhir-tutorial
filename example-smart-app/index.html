@@ -214,18 +214,10 @@ var GAP_DEFS = {
   ked:   { name:'Kidney Health Evaluation',     sub:'Diabetes Care · KED',     icd:'N18.9',  icdDesc:'Chronic kidney disease, unspecified',                                pip:'pip-open', dueTxt:'Overdue' },
   dep:   { name:'Depression Screening (PHQ-9)', sub:'Behavioral Health · DEP', icd:'Z13.31', icdDesc:'Encounter for screening for depression',                             pip:'pip-warn', dueTxt:'Due this visit' },
 };
-var GAP_PROFILES = [
-  ['hba1c','col','eed'],
-  ['bcs',  'cbp','col'],
-  ['hba1c','bcs','cbp'],
-  ['col',  'eed','ked'],
-  ['hba1c','ked','dep'],
-];
-function hashId(id) {
-  var h=0; for(var i=0;i<String(id).length;i++) h=(h*31+String(id).charCodeAt(i))&0xffff; return h;
-}
-function getGaps(patientId) {
-  return GAP_PROFILES[hashId(patientId)%GAP_PROFILES.length].map(function(k){ return Object.assign({id:k},GAP_DEFS[k]); });
+function getGaps() {
+  var keys = Object.keys(GAP_DEFS);
+  for(var i=keys.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=keys[i]; keys[i]=keys[j]; keys[j]=t; }
+  return keys.slice(0,3).map(function(k){ return Object.assign({id:k},GAP_DEFS[k]); });
 }
 
 var _smart=null, _patientId=null, _gapStates={}, _currentGaps=[];
@@ -267,15 +259,17 @@ function renderPatient(pt) {
 }
 
 // ── Render EHR data ───────────────────────────────────────────────────────────
+function fmtDate(s){ if(!s)return null; var d=new Date(s); return isNaN(d)?null:d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+
 function renderConditions(bundle, highlightNewIcd) {
   var panel = document.getElementById('tab-problems');
   var entries = (bundle.entry||[]).map(function(e){ return e.resource; });
   if(!entries.length){ panel.innerHTML='<div class="fhir-empty">No conditions on record</div>'; return; }
 
   entries.sort(function(a,b){
-    var av = a.clinicalStatus&&a.clinicalStatus.coding&&a.clinicalStatus.coding[0]&&a.clinicalStatus.coding[0].code==='active'?0:1;
-    var bv = b.clinicalStatus&&b.clinicalStatus.coding&&b.clinicalStatus.coding[0]&&b.clinicalStatus.coding[0].code==='active'?0:1;
-    return av-bv;
+    var ad = new Date(a.recordedDate||a.onsetDateTime||0);
+    var bd = new Date(b.recordedDate||b.onsetDateTime||0);
+    return bd-ad;
   });
 
   panel.innerHTML = entries.map(function(c){
@@ -283,11 +277,12 @@ function renderConditions(bundle, highlightNewIcd) {
     var code = coding&&coding.code||'—';
     var display = (c.code&&c.code.text)||coding&&coding.display||'Unknown';
     var status = c.clinicalStatus&&c.clinicalStatus.coding&&c.clinicalStatus.coding[0]&&c.clinicalStatus.coding[0].code||'unknown';
+    var recorded = fmtDate(c.recordedDate||c.onsetDateTime);
     var isNew = highlightNewIcd && code===highlightNewIcd;
     return '<div class="fhir-row'+(isNew?' new-entry':'')+'">' +
       '<div class="fhir-code">'+code+'</div>' +
       '<div class="fhir-body"><div class="fhir-name">'+(isNew?'<strong>'+display+'</strong>':display)+'</div>' +
-      (isNew?'<div class="fhir-sub" style="color:var(--green)">Just added by Care Insights</div>':'') +
+      '<div class="fhir-sub">'+(isNew?'<span style="color:var(--green)">Just added by Care Insights</span>':(recorded||'—'))+'</div>' +
       '</div>' +
       '<div class="fhir-status'+(status!=='active'?' inactive':'')+'">'+status+'</div>' +
     '</div>';
@@ -298,12 +293,19 @@ function renderMedications(bundle) {
   var panel = document.getElementById('tab-meds');
   var entries = (bundle.entry||[]).map(function(e){ return e.resource; });
   if(!entries.length){ panel.innerHTML='<div class="fhir-empty">No active medications on record</div>'; return; }
+  entries.sort(function(a,b){ return new Date(b.authoredOn||0)-new Date(a.authoredOn||0); });
   panel.innerHTML = entries.map(function(m){
     var display = (m.medicationCodeableConcept&&(m.medicationCodeableConcept.text||m.medicationCodeableConcept.coding&&m.medicationCodeableConcept.coding[0]&&m.medicationCodeableConcept.coding[0].display))||'Unknown medication';
     var status = m.status||'unknown';
     var sig = m.dosageInstruction&&m.dosageInstruction[0]&&m.dosageInstruction[0].text||'';
+    var authored = fmtDate(m.authoredOn);
+    var prescriber = m.requester&&(m.requester.display||'')||'';
     return '<div class="fhir-row">' +
-      '<div class="fhir-body"><div class="fhir-name">'+display+'</div>'+(sig?'<div class="fhir-sub">'+sig+'</div>':'')+'</div>' +
+      '<div class="fhir-body">' +
+        '<div class="fhir-name">'+display+'</div>' +
+        '<div class="fhir-sub">'+(sig||'No sig on file')+(authored?' · Prescribed '+authored:'')+'</div>' +
+        (prescriber?'<div class="fhir-sub">'+prescriber+'</div>':'') +
+      '</div>' +
       '<div class="fhir-status'+(status!=='active'?' inactive':'')+'">'+status+'</div>' +
     '</div>';
   }).join('');
@@ -313,27 +315,35 @@ function renderEncounters(bundle) {
   var panel = document.getElementById('tab-encounters');
   var entries = (bundle.entry||[]).map(function(e){ return e.resource; });
   if(!entries.length){ panel.innerHTML='<div class="fhir-empty">No encounters on record</div>'; return; }
+  entries.sort(function(a,b){ return new Date(b.period&&b.period.start||0)-new Date(a.period&&a.period.start||0); });
   panel.innerHTML = entries.map(function(e){
     var type = e.type&&e.type[0]&&(e.type[0].text||e.type[0].coding&&e.type[0].coding[0]&&e.type[0].coding[0].display)||'Encounter';
-    var date = e.period&&e.period.start ? new Date(e.period.start).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+    var cls = e.class&&(e.class.display||e.class.code)||'';
+    var start = fmtDate(e.period&&e.period.start);
+    var end = fmtDate(e.period&&e.period.end);
+    var dateStr = start ? (end&&end!==start ? start+' – '+end : start) : '—';
     var status = e.status||'unknown';
+    var provider = e.participant&&e.participant[0]&&e.participant[0].individual&&e.participant[0].individual.display||'';
     return '<div class="fhir-row">' +
-      '<div class="fhir-body"><div class="fhir-name">'+type+'</div><div class="fhir-sub">'+date+'</div></div>' +
+      '<div class="fhir-body">' +
+        '<div class="fhir-name">'+type+(cls?' <span style="font-weight:400;color:var(--sub);font-size:12px">· '+cls+'</span>':'')+'</div>' +
+        '<div class="fhir-sub">'+dateStr+(provider?' · '+provider:'')+'</div>' +
+      '</div>' +
       '<div class="fhir-status'+(status==='finished'?' inactive':'')+'">'+status+'</div>' +
     '</div>';
   }).join('');
 }
 
 function loadEhrData(highlightIcd) {
-  fhirGet('/Condition?patient='+_patientId+'&category=problem-list-item&_count=20')
+  fhirGet('/Condition?patient='+_patientId+'&category=problem-list-item&_sort=-recorded-date&_count=10')
     .then(function(b){ renderConditions(b, highlightIcd||null); })
     .catch(function(){ document.getElementById('tab-problems').innerHTML='<div class="fhir-empty">Could not load conditions</div>'; });
 
-  fhirGet('/MedicationRequest?patient='+_patientId+'&status=active&_count=10')
+  fhirGet('/MedicationRequest?patient='+_patientId+'&status=active&_sort=-authoredon&_count=10')
     .then(function(b){ renderMedications(b); })
     .catch(function(){ document.getElementById('tab-meds').innerHTML='<div class="fhir-empty">Could not load medications</div>'; });
 
-  fhirGet('/Encounter?patient='+_patientId+'&_sort=-date&_count=5')
+  fhirGet('/Encounter?patient='+_patientId+'&_sort=-date&_count=10')
     .then(function(b){ renderEncounters(b); })
     .catch(function(){ document.getElementById('tab-encounters').innerHTML='<div class="fhir-empty">Could not load encounters</div>'; });
 }
@@ -373,8 +383,8 @@ function buildCard(gap) {
   return el;
 }
 
-function renderGaps(patientId) {
-  _currentGaps=getGaps(patientId);
+function renderGaps() {
+  _currentGaps=getGaps();
   _currentGaps.forEach(function(g){ _gapStates[g.id]='open'; });
   var list=document.getElementById('gapList');
   list.innerHTML='';
@@ -447,7 +457,7 @@ FHIR.oauth2.ready(function(smart) {
     document.getElementById('loadingEl').style.display='none';
     document.getElementById('mainContent').style.display='block';
     renderPatient(patient);
-    renderGaps(patient.id);
+    renderGaps();
     loadEhrData(null);
     setConn('ok','Connected · '+smart.server.serviceUrl.replace('https://',''));
   }).catch(function(err){ showError('Could not read patient: '+(err.message||err)); });
