@@ -187,13 +187,22 @@
       </div>
     </div>
 
-    <!-- Care Gaps -->
+    <!-- Quality Gaps -->
     <div class="section">
       <div class="section-row">
-        <span class="section-label">Care Gaps — Optum</span>
+        <span class="section-label">Quality Gaps — HEDIS</span>
         <span class="count-pill" id="gapCount"></span>
       </div>
       <div id="gapList"></div>
+    </div>
+
+    <!-- Diagnosis Gaps -->
+    <div class="section">
+      <div class="section-row">
+        <span class="section-label">Diagnosis Gaps — HCC Risk</span>
+        <span class="count-pill" id="diagCount"></span>
+      </div>
+      <div id="diagList"></div>
     </div>
 
     <div class="footer"><a href="#">Terms</a> · <a href="#">Privacy</a></div>
@@ -205,22 +214,34 @@
 <script src='./lib/js/fhir-client-v0.1.12.js'></script>
 <script src='./lib/js/fhir-client-cerner-additions-1.0.0.js'></script>
 <script>
-var GAP_DEFS = {
-  hba1c: { name:'HbA1c Poor Control',          sub:'Diabetes Care · CDC',     icd:'E11.65', icdDesc:'Type 2 diabetes mellitus with hyperglycemia',                        pip:'pip-open', dueTxt:'Overdue' },
-  col:   { name:'Colorectal Cancer Screening',  sub:'Preventive Care · COL-E', icd:'Z12.11', icdDesc:'Encounter for screening for malignant neoplasm of colon',            pip:'pip-open', dueTxt:'Overdue' },
-  bcs:   { name:'Breast Cancer Screening',      sub:'Preventive Care · BCS-E', icd:'Z12.31', icdDesc:'Encounter for screening mammogram for malignant neoplasm of breast', pip:'pip-warn', dueTxt:'Due in 90 days' },
-  cbp:   { name:'Blood Pressure Control',       sub:'Hypertension · CBP',      icd:'I10',    icdDesc:'Essential (primary) hypertension',                                   pip:'pip-warn', dueTxt:'Due in 90 days' },
-  eed:   { name:'Diabetic Eye Exam',            sub:'Diabetes Care · EED',     icd:'Z01.00', icdDesc:'Encounter for examination of eyes and vision',                       pip:'pip-open', dueTxt:'Overdue' },
-  ked:   { name:'Kidney Health Evaluation',     sub:'Diabetes Care · KED',     icd:'N18.9',  icdDesc:'Chronic kidney disease, unspecified',                                pip:'pip-open', dueTxt:'Overdue' },
-  dep:   { name:'Depression Screening (PHQ-9)', sub:'Behavioral Health · DEP', icd:'Z13.31', icdDesc:'Encounter for screening for depression',                             pip:'pip-warn', dueTxt:'Due this visit' },
+var QUALITY_DEFS = {
+  hba1c: { name:'HbA1c Poor Control',          sub:'Diabetes Care · COL-E',   icd:'E11.65', icdDesc:'Type 2 diabetes mellitus with hyperglycemia',                        pip:'pip-open', dueTxt:'Overdue',        badge:'HEDIS 2026' },
+  col:   { name:'Colorectal Cancer Screening',  sub:'Preventive Care · COL-E', icd:'Z12.11', icdDesc:'Encounter for screening for malignant neoplasm of colon',            pip:'pip-open', dueTxt:'Overdue',        badge:'HEDIS 2026' },
+  bcs:   { name:'Breast Cancer Screening',      sub:'Preventive Care · BCS-E', icd:'Z12.31', icdDesc:'Encounter for screening mammogram for malignant neoplasm of breast', pip:'pip-warn', dueTxt:'Due in 90 days', badge:'HEDIS 2026' },
+  cbp:   { name:'Blood Pressure Control',       sub:'Hypertension · CBP',      icd:'I10',    icdDesc:'Essential (primary) hypertension',                                   pip:'pip-warn', dueTxt:'Due in 90 days', badge:'HEDIS 2026' },
+  eed:   { name:'Diabetic Eye Exam',            sub:'Diabetes Care · EED',     icd:'Z01.00', icdDesc:'Encounter for examination of eyes and vision',                       pip:'pip-open', dueTxt:'Overdue',        badge:'HEDIS 2026' },
+  ked:   { name:'Kidney Health Evaluation',     sub:'Diabetes Care · KED',     icd:'N18.9',  icdDesc:'Chronic kidney disease, unspecified',                                pip:'pip-open', dueTxt:'Overdue',        badge:'HEDIS 2026' },
+  dep:   { name:'Depression Screening (PHQ-9)', sub:'Behavioral Health · DEP', icd:'Z13.31', icdDesc:'Encounter for screening for depression',                             pip:'pip-warn', dueTxt:'Due this visit', badge:'HEDIS 2026' },
 };
-function getGaps() {
-  var keys = Object.keys(GAP_DEFS);
+var DIAG_DEFS = {
+  htn:     { name:'Hypertension',                    sub:'Cardiovascular · HCC 136',  icd:'I10',    icdDesc:'Essential (primary) hypertension',               pip:'pip-open', dueTxt:'Undocumented', badge:'HCC 2026' },
+  dm2:     { name:'Type 2 Diabetes Mellitus',        sub:'Endocrine · HCC 19',        icd:'E11.9',  icdDesc:'Type 2 diabetes mellitus without complications', pip:'pip-open', dueTxt:'Undocumented', badge:'HCC 2026' },
+  hld:     { name:'Hyperlipidemia',                  sub:'Cardiovascular · HCC 85',   icd:'E78.5',  icdDesc:'Hyperlipidemia, unspecified',                    pip:'pip-warn', dueTxt:'Suspected',    badge:'HCC 2026' },
+  ckd3:    { name:'Chronic Kidney Disease, Stage 3', sub:'Nephrology · HCC 137',      icd:'N18.3',  icdDesc:'Chronic kidney disease, stage 3 (moderate)',     pip:'pip-open', dueTxt:'Undocumented', badge:'HCC 2026' },
+  hf:      { name:'Heart Failure',                   sub:'Cardiovascular · HCC 85',   icd:'I50.9',  icdDesc:'Heart failure, unspecified',                     pip:'pip-open', dueTxt:'Suspected',    badge:'HCC 2026' },
+  obesity: { name:'Morbid Obesity',                  sub:'Metabolic · HCC 22',        icd:'E66.01', icdDesc:'Morbid (severe) obesity due to excess calories',  pip:'pip-warn', dueTxt:'Suspected',    badge:'HCC 2026' },
+  afib:    { name:'Atrial Fibrillation',             sub:'Cardiovascular · HCC 96',   icd:'I48.91', icdDesc:'Unspecified atrial fibrillation',                pip:'pip-open', dueTxt:'Undocumented', badge:'HCC 2026' },
+  copd:    { name:'COPD',                            sub:'Pulmonary · HCC 111',       icd:'J44.1',  icdDesc:'COPD with acute exacerbation',                   pip:'pip-warn', dueTxt:'Suspected',    badge:'HCC 2026' },
+};
+function shuffle(keys) {
   for(var i=keys.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=keys[i]; keys[i]=keys[j]; keys[j]=t; }
-  return keys.slice(0,3).map(function(k){ return Object.assign({id:k},GAP_DEFS[k]); });
+  return keys;
+}
+function pickGaps(defs, n) {
+  return shuffle(Object.keys(defs)).slice(0,n).map(function(k){ return Object.assign({id:k},defs[k]); });
 }
 
-var _smart=null, _patientId=null, _gapStates={}, _currentGaps=[];
+var _smart=null, _patientId=null, _gapStates={}, _currentGaps=[], _currentDiags=[];
 var _activeTab = 'problems';
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -335,7 +356,7 @@ function renderEncounters(bundle) {
 }
 
 function loadEhrData(highlightIcd) {
-  fhirGet('/Condition?patient='+_patientId+'&category=problem-list-item&_sort=-recorded-date&_count=10')
+  fhirGet('/Condition?patient='+_patientId+'&category=problem-list-item&_count=10')
     .then(function(b){ renderConditions(b, highlightIcd||null); })
     .catch(function(){ document.getElementById('tab-problems').innerHTML='<div class="fhir-empty">Could not load conditions</div>'; });
 
@@ -350,16 +371,19 @@ function loadEhrData(highlightIcd) {
 
 // ── Gap rendering ─────────────────────────────────────────────────────────────
 function updateCountBadge() {
-  var n=_currentGaps.filter(function(g){ return _gapStates[g.id]==='open'; }).length;
-  var el=document.getElementById('gapCount');
-  el.textContent=n+' open'; el.className='count-pill'+(n===0?' zero':'');
+  var nq=_currentGaps.filter(function(g){ return _gapStates[g.id]==='open'; }).length;
+  var nd=_currentDiags.filter(function(g){ return _gapStates[g.id]==='open'; }).length;
+  var eq=document.getElementById('gapCount');
+  eq.textContent=nq+' open'; eq.className='count-pill'+(nq===0?' zero':'');
+  var ed=document.getElementById('diagCount');
+  ed.textContent=nd+' open'; ed.className='count-pill'+(nd===0?' zero':'');
 }
 
 function buildCard(gap) {
   var s=_gapStates[gap.id];
   var chips = s==='accepted' ? '<span class="chip c-ok">✓ Added to Problem List</span>'
              : s==='declined' ? '<span class="chip c-dec">Declined</span>'
-             : '<span class="chip c-due">'+gap.dueTxt+'</span><span class="chip c-icd">'+gap.icd+'</span><span class="chip c-hed">HEDIS 2026</span>';
+             : '<span class="chip c-due">'+gap.dueTxt+'</span><span class="chip c-icd">'+gap.icd+'</span><span class="chip c-hed">'+gap.badge+'</span>';
   var actions = (s!=='accepted'&&s!=='declined')
     ? '<div class="gap-actions"><button class="btn btn-blue" onclick="startAccept(\''+gap.id+'\')">Accept</button><button class="btn btn-danger" onclick="declineGap(\''+gap.id+'\')">Decline</button></div>' : '';
   var el=document.createElement('div');
@@ -384,11 +408,19 @@ function buildCard(gap) {
 }
 
 function renderGaps() {
-  _currentGaps=getGaps();
-  _currentGaps.forEach(function(g){ _gapStates[g.id]='open'; });
+  _currentGaps = pickGaps(QUALITY_DEFS, 3);
+  _currentDiags = pickGaps(DIAG_DEFS, 2);
+  var allGaps = _currentGaps.concat(_currentDiags);
+  allGaps.forEach(function(g){ _gapStates[g.id]='open'; });
+
   var list=document.getElementById('gapList');
   list.innerHTML='';
   _currentGaps.forEach(function(g){ list.appendChild(buildCard(g)); });
+
+  var dlist=document.getElementById('diagList');
+  dlist.innerHTML='';
+  _currentDiags.forEach(function(g){ dlist.appendChild(buildCard(g)); });
+
   updateCountBadge();
 }
 
@@ -397,7 +429,7 @@ function startAccept(id){ document.getElementById('confirm-'+id).classList.add('
 function cancelAccept(id){ document.getElementById('confirm-'+id).classList.remove('open'); }
 
 function confirmAccept(id) {
-  var gap=_currentGaps.find(function(g){ return g.id===id; });
+  var gap=_currentGaps.concat(_currentDiags).find(function(g){ return g.id===id; });
   var btn=document.getElementById('confirmBtn-'+id);
   var wst=document.getElementById('wst-'+id);
   btn.disabled=true; wst.textContent='Writing to Cerner…'; wst.className='write-status show';
@@ -448,6 +480,7 @@ function declineGap(id) {
   var acts=card.querySelector('.gap-actions'); if(acts)acts.remove();
   updateCountBadge();
 }
+
 
 // ── SMART init ────────────────────────────────────────────────────────────────
 FHIR.oauth2.ready(function(smart) {
